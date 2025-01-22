@@ -167,7 +167,7 @@ impl CTRNN {
     }
 
     pub fn reset(&mut self) {
-        self.set_outputs(Array::zeros(self.outputs.dim()));
+        self.set_states(Array::zeros(self.outputs.dim()));
     }
 
     // --- glue ---
