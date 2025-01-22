@@ -6,7 +6,6 @@ use std::{
 use ndarray::{s, Array, Array1, Array2, ArrayView1, Axis};
 use numpy::{PyArray1, PyArray2, PyArrayMethods, PyReadonlyArray1, PyReadonlyArray2, ToPyArray};
 use pyo3::{prelude::*, types::PyType};
-use rand_distr::Distribution;
 use serde::{Deserialize, Serialize};
 
 #[pymodule]
@@ -177,9 +176,9 @@ impl CTRNN {
     fn euler_step_py<'py>(
         &mut self,
         py: Python<'py>,
-        inputs: PyReadonlyArray2<'py, f64>,
+        inputs: PyReadonlyArray1<'py, f64>,
     ) -> Bound<'py, PyArray1<f64>> {
-        let nd_inputs = inputs.as_array().remove_axis(Axis(0));
+        let nd_inputs = inputs.as_array();
         let output = self.euler_step(nd_inputs);
         output.to_pyarray_bound(py)
     }
