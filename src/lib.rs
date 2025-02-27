@@ -3,7 +3,7 @@ use std::{
     io::{self, BufReader, BufWriter, Write},
 };
 
-use ndarray::{s, Array, Array1, Array2, ArrayView1, Axis};
+use ndarray::{Array, Array1, Array2, ArrayView1, Axis, s};
 use numpy::{PyArray1, PyArray2, PyArrayMethods, PyReadonlyArray1, PyReadonlyArray2, ToPyArray};
 use pyo3::{prelude::*, types::PyType};
 use serde::{Deserialize, Serialize};
@@ -42,6 +42,14 @@ impl CTRNNConfig {
             self.step_size,
         )
     }
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct CTRNNGenome {
+    taus: Vec<f64>,
+    weights: Vec<Vec<f64>>,
+    biases: Vec<f64>,
+    gains: Vec<f64>,
 }
 
 #[pyclass(module = "ctrnn")]
@@ -106,6 +114,21 @@ impl CTRNN {
             io::Error::new(io::ErrorKind::InvalidData, "Failed to deserialize json")
         })?;
         Ok(Self::from(parameters))
+    }
+
+    pub fn load_genome_json(&mut self, genome: &str) -> serde_json::Result<()> {
+        let genome: CTRNNGenome = serde_json::from_str(genome)?;
+        self.taus = Array::from(genome.taus);
+        self.biases = Array::from(genome.biases);
+        self.weights = Array::from_shape_vec(
+            (self.total_size, self.total_size),
+            genome.weights.into_iter().flatten().collect(),
+        )
+        .unwrap();
+        self.gains = Array::from(genome.gains);
+        self.outputs = Array::zeros(self.total_size);
+        self.states = Array::zeros(self.total_size);
+        Ok(())
     }
 
     pub fn output(&self) -> ArrayView1<f64> {
@@ -180,7 +203,7 @@ impl CTRNN {
     ) -> Bound<'py, PyArray1<f64>> {
         let nd_inputs = inputs.as_array();
         let output = self.euler_step(nd_inputs);
-        output.to_pyarray_bound(py)
+        output.to_pyarray(py)
     }
 
     #[pyo3(name = "to_file")]
@@ -194,6 +217,13 @@ impl CTRNN {
         Ok(Self::from_file(filename)?)
     }
 
+    #[pyo3(name = "load_genome_json")]
+    fn load_genome_json_py(&mut self, genome: &str) -> PyResult<()> {
+        Ok(self.load_genome_json(genome).map_err(|_| {
+            io::Error::new(io::ErrorKind::InvalidData, "Failed to deserialize json")
+        })?)
+    }
+
     #[pyo3(name = "clone")]
     fn clone_py(&self) -> Self {
         self.clone()
@@ -202,7 +232,7 @@ impl CTRNN {
     #[pyo3(name = "get_output")]
     fn get_output_py<'py>(&self, py: Python<'py>) -> Bound<'py, PyArray2<f64>> {
         let output = self.output().insert_axis(Axis(0));
-        output.to_pyarray_bound(py)
+        output.to_pyarray(py)
     }
 
     fn __getstate__(&self) -> PyResult<Vec<u8>> {
@@ -229,7 +259,7 @@ impl CTRNN {
 
     #[getter(taus)]
     fn taus_py<'py>(&self, py: Python<'py>) -> Bound<'py, PyArray1<f64>> {
-        self.taus.to_pyarray_bound(py)
+        self.taus.to_pyarray(py)
     }
 
     #[setter(taus)]
@@ -239,7 +269,7 @@ impl CTRNN {
 
     #[getter(weights)]
     fn weights_py<'py>(&self, py: Python<'py>) -> Bound<'py, PyArray2<f64>> {
-        self.weights.to_pyarray_bound(py)
+        self.weights.to_pyarray(py)
     }
 
     #[setter(weights)]
@@ -249,7 +279,7 @@ impl CTRNN {
 
     #[getter(biases)]
     fn biases_py<'py>(&self, py: Python<'py>) -> Bound<'py, PyArray1<f64>> {
-        self.biases.to_pyarray_bound(py)
+        self.biases.to_pyarray(py)
     }
 
     #[setter(biases)]
@@ -259,7 +289,7 @@ impl CTRNN {
 
     #[getter(gains)]
     fn gains_py<'py>(&self, py: Python<'py>) -> Bound<'py, PyArray1<f64>> {
-        self.gains.to_pyarray_bound(py)
+        self.gains.to_pyarray(py)
     }
 
     #[setter(gains)]
@@ -269,7 +299,7 @@ impl CTRNN {
 
     #[getter(states)]
     fn states_py<'py>(&self, py: Python<'py>) -> Bound<'py, PyArray1<f64>> {
-        self.states.to_pyarray_bound(py)
+        self.states.to_pyarray(py)
     }
 
     #[setter(states)]
@@ -280,7 +310,7 @@ impl CTRNN {
 
     #[getter(outputs)]
     fn outputs_py<'py>(&self, py: Python<'py>) -> Bound<'py, PyArray1<f64>> {
-        self.outputs.to_pyarray_bound(py)
+        self.outputs.to_pyarray(py)
     }
 
     #[setter(outputs)]

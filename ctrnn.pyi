@@ -28,6 +28,10 @@ class CTRNN:
         """
         Load parameters from a json file
         """
+    def load_genome_json(self, genome: str) -> None:
+        """
+        Load a squid genome from a json string
+        """
     def burn_in(self, steps: int) -> None:
         """
         Apply `steps` number of Euler steps with no external input
