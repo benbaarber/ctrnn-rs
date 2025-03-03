@@ -44,5 +44,9 @@ class CTRNN:
         """
         Reset CTRNN state
         """
+    def clone(self) -> CTRNN:
+        """
+        Clone this instance
+        """
     def __getstate__(self) -> bytes: ...
     def __setstate__(self, state: bytes) -> None: ...
