@@ -318,6 +318,26 @@ impl CTRNN {
         let value = value.to_owned_array();
         self.set_outputs(value);
     }
+
+    #[getter(input_size)]
+    fn input_size_py(&self) -> usize {
+        self.config.input_size
+    }
+
+    #[getter(hidden_size)]
+    fn hidden_size_py(&self) -> usize {
+        self.config.hidden_size
+    }
+
+    #[getter(output_size)]
+    fn output_size_py(&self) -> usize {
+        self.config.output_size
+    }
+
+    #[getter(total_size)]
+    fn total_size_py(&self) -> usize {
+        self.total_size
+    }
 }
 
 // Not a very efficient solution, but easiest to quickly implement

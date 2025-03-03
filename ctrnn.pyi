@@ -8,6 +8,10 @@ class CTRNN:
     gains: NDArray[np.float64]
     states: NDArray[np.float64]
     outputs: NDArray[np.float64]
+    input_size: int
+    hidden_size: int
+    output_size: int
+    total_size: int
     def __new__(
         cls, input_size: int, hidden_size: int, output_size: int, step_size: float = 0.1
     ) -> CTRNN: ...
