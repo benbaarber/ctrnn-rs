@@ -84,6 +84,7 @@ impl CTRNN {
         input_slice += &inputs;
         let derivatives = (1.0 / &self.taus) * (net_inputs - &self.states);
         self.states = &self.states + self.config.step_size * derivatives;
+        self.states = self.states.clamp(-500.0, 500.0);
         self.outputs = Self::sigmoid((&self.gains * (&self.states + &self.biases)).view());
         self.output()
     }
