@@ -8,40 +8,12 @@ use numpy::{PyArray1, PyArray2, PyArrayMethods, PyReadonlyArray1, PyReadonlyArra
 use pyo3::{prelude::*, types::PyType};
 use serde::{Deserialize, Serialize};
 
+const BINCODE_CONF: bincode::config::Configuration = bincode::config::standard();
+
 #[pymodule]
 mod ctrnn {
     #[pymodule_export]
     use crate::CTRNN;
-}
-
-#[derive(Clone, Copy, Debug, PartialEq, Serialize, Deserialize)]
-pub struct CTRNNConfig {
-    pub input_size: usize,
-    pub hidden_size: usize,
-    pub output_size: usize,
-    pub step_size: f64,
-}
-
-impl Default for CTRNNConfig {
-    fn default() -> Self {
-        Self {
-            input_size: 1,
-            hidden_size: 1,
-            output_size: 1,
-            step_size: 0.1,
-        }
-    }
-}
-
-impl CTRNNConfig {
-    pub fn build(&self) -> CTRNN {
-        CTRNN::new(
-            self.input_size,
-            self.hidden_size,
-            self.output_size,
-            self.step_size,
-        )
-    }
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -55,8 +27,16 @@ pub struct CTRNNGenome {
 #[pyclass(module = "ctrnn")]
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct CTRNN {
-    config: CTRNNConfig,
+    #[pyo3(get)]
+    input_size: usize,
+    #[pyo3(get)]
+    hidden_size: usize,
+    #[pyo3(get)]
+    output_size: usize,
+    #[pyo3(get)]
     total_size: usize,
+    #[pyo3(get, set)]
+    step_size: f64,
     taus: Array1<f64>,
     weights: Array2<f64>,
     biases: Array1<f64>,
@@ -66,24 +46,16 @@ pub struct CTRNN {
 }
 
 impl CTRNN {
-    pub fn config(&self) -> CTRNNConfig {
-        self.config
-    }
-
     pub fn shape(&self) -> (usize, usize, usize) {
-        (
-            self.config.input_size,
-            self.config.hidden_size,
-            self.config.output_size,
-        )
+        (self.input_size, self.hidden_size, self.output_size)
     }
 
-    pub fn euler_step(&mut self, inputs: ArrayView1<f64>) -> ArrayView1<f64> {
+    pub fn euler_step(&mut self, inputs: ArrayView1<f64>) -> ArrayView1<'_, f64> {
         let mut net_inputs = self.outputs.dot(&self.weights);
         let mut input_slice = net_inputs.slice_mut(s![..inputs.dim()]);
         input_slice += &inputs;
         let derivatives = (1.0 / &self.taus) * (net_inputs - &self.states);
-        self.states = &self.states + self.config.step_size * derivatives;
+        self.states = &self.states + self.step_size * derivatives;
         self.states = self.states.clamp(-500.0, 500.0);
         self.outputs = Self::sigmoid((&self.gains * (&self.states + &self.biases)).view());
         self.output()
@@ -132,8 +104,8 @@ impl CTRNN {
         Ok(())
     }
 
-    pub fn output(&self) -> ArrayView1<f64> {
-        let output_ix = self.total_size - self.config.output_size;
+    pub fn output(&self) -> ArrayView1<'_, f64> {
+        let output_ix = self.total_size - self.output_size;
         self.outputs.slice(s![output_ix..])
     }
 
@@ -168,13 +140,11 @@ impl CTRNN {
         let size = input_size + hidden_size + output_size;
 
         Self {
-            config: CTRNNConfig {
-                input_size,
-                hidden_size,
-                output_size,
-                step_size,
-            },
+            input_size,
+            hidden_size,
+            output_size,
             total_size: size,
+            step_size,
             taus: Array::ones(size),
             weights: Array::ones((size, size)),
             biases: Array::zeros(size),
@@ -237,24 +207,24 @@ impl CTRNN {
     }
 
     fn __getstate__(&self) -> PyResult<Vec<u8>> {
-        let state = bincode::serialize(self)
+        let state = bincode::serde::encode_to_vec(self, BINCODE_CONF)
             .map_err(|_| io::Error::new(io::ErrorKind::InvalidData, "Failed to serialize bytes"))?;
         Ok(state)
     }
 
     fn __setstate__(&mut self, state: Vec<u8>) -> PyResult<()> {
-        *self = bincode::deserialize(&state).map_err(|_| {
-            io::Error::new(io::ErrorKind::InvalidData, "Failed to deserialize bytes")
-        })?;
+        *self = bincode::serde::decode_from_slice(&state, BINCODE_CONF)
+            .map_err(|_| io::Error::new(io::ErrorKind::InvalidData, "Failed to deserialize bytes"))?
+            .0;
         Ok(())
     }
 
     fn __getnewargs__(&self) -> PyResult<(usize, usize, usize, f64)> {
         Ok((
-            self.config.input_size,
-            self.config.hidden_size,
-            self.config.output_size,
-            self.config.step_size,
+            self.input_size,
+            self.hidden_size,
+            self.output_size,
+            self.step_size,
         ))
     }
 
@@ -319,26 +289,6 @@ impl CTRNN {
         let value = value.to_owned_array();
         self.set_outputs(value);
     }
-
-    #[getter(input_size)]
-    fn input_size_py(&self) -> usize {
-        self.config.input_size
-    }
-
-    #[getter(hidden_size)]
-    fn hidden_size_py(&self) -> usize {
-        self.config.hidden_size
-    }
-
-    #[getter(output_size)]
-    fn output_size_py(&self) -> usize {
-        self.config.output_size
-    }
-
-    #[getter(total_size)]
-    fn total_size_py(&self) -> usize {
-        self.total_size
-    }
 }
 
 // Not a very efficient solution, but easiest to quickly implement
@@ -361,11 +311,11 @@ struct SerializableCTRNN {
 impl From<&CTRNN> for SerializableCTRNN {
     fn from(value: &CTRNN) -> Self {
         Self {
-            input_size: value.config.input_size,
-            hidden_size: value.config.hidden_size,
-            output_size: value.config.output_size,
+            input_size: value.input_size,
+            hidden_size: value.hidden_size,
+            output_size: value.output_size,
             total_size: value.total_size,
-            step_size: value.config.step_size,
+            step_size: value.step_size,
             taus: value.taus.to_vec(),
             weights: value.weights.outer_iter().map(|x| x.to_vec()).collect(),
             biases: value.biases.to_vec(),
@@ -378,15 +328,11 @@ impl From<&CTRNN> for SerializableCTRNN {
 
 impl From<SerializableCTRNN> for CTRNN {
     fn from(value: SerializableCTRNN) -> Self {
-        let config = CTRNNConfig {
+        Self {
             input_size: value.input_size,
             hidden_size: value.hidden_size,
             output_size: value.output_size,
             step_size: value.step_size,
-        };
-
-        Self {
-            config,
             total_size: value.total_size,
             taus: Array::from(value.taus),
             weights: Array::from_shape_vec(
