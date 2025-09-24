@@ -2,7 +2,7 @@
 
 ## Installation
 
-Install the package directly from git over ssh by running:
+Install the package directly from git by running:
 
 ```sh
 pip install "git+https://github.com/benbaarber/ctrnn-rs.git"
