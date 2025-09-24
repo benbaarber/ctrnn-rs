@@ -10,4 +10,4 @@ pip install "git+https://github.com/benbaarber/ctrnn-rs.git"
 
 ## Usage
 
-View (`ctrnn.pyi`)[./ctrnn.pyi] for the function signatures and documentation.
+View [`ctrnn.pyi`](./ctrnn.pyi) for the function signatures and documentation.
